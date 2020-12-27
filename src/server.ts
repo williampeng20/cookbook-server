@@ -1,50 +1,13 @@
-var express = require('express');
-var { graphqlHTTP } = require('express-graphql');
-var { buildSchema } = require('graphql');
-var cors = require('cors');
- 
-// Construct a schema, using GraphQL schema language
-var schemaDefinition = `
-input RecipeInput {
-    name: String!
-    author: String!
-    ingredients: [String!]!
-    directions: [String!]!
-}
-
-type Recipe {
-    id: ID!
-    name: String!
-    author: String!
-    ingredients: [String!]!
-    directions: [String!]!
-}
-
-type Query {
-    getRecipe(id: ID!): Recipe
-    getRecipes(author: String): [Recipe!]!
-}
-
-type Mutation {
-    createRecipe(input: RecipeInput): Recipe
-    updateRecipe(id: ID!, input: RecipeInput): Recipe
-}
-`;
-
-class Recipe {
-    constructor(id, {name, author, ingredients, directions}) {
-        this.id = id;
-        this.name = name;
-        this.author = author;
-        this.ingredients = ingredients;
-        this.directions = directions;
-    }
-}
-
-var schema = buildSchema(schemaDefinition);
+import express = require('express');
+import expressGraphQl = require('express-graphql');
+import graphQl = require('graphql');
+import cors = require('cors');
+import { schemaDefinition, Recipe } from './schema';
+const { graphqlHTTP } = expressGraphQl;
+const { buildSchema } = graphQl;
 
 // TODO: Migrate to a Database Server
-var fakeDb = {};
+var fakeDb: { [key: string]: Recipe} = {};
 var root = {
     getRecipe: ({id}) => {
         if (!fakeDb[id]) {
@@ -53,7 +16,7 @@ var root = {
         return new Recipe(id, fakeDb[id]);
     },
     getRecipes: ({author}) => {
-        recipes = []
+        const recipes = [];
         for (const [id, recipe] of Object.entries(fakeDb)) {
             if (!author || (author == recipe.author)) {
                 recipes.push(recipe)
@@ -82,7 +45,9 @@ var root = {
         }
     },
 };
- 
+
+
+var schema = buildSchema(schemaDefinition);
 var app = express();
 app.use(cors());
 app.use('/graphql', graphqlHTTP({
@@ -91,4 +56,4 @@ app.use('/graphql', graphqlHTTP({
     graphiql: true,
 }));
 app.listen(4000);
-console.log('Running a GraphQL API server at http://localhost:4000/graphql');
+console.log('Running GraphQL API server at http://localhost:4000/graphql');
