@@ -24,6 +24,7 @@ type Query {
 type Mutation {
     createRecipe(input: RecipeInput): Recipe
     updateRecipe(id: ID!, input: RecipeInput): Recipe
+    deleteRecipe(id: ID!): Boolean
 }
 `;
 
@@ -31,12 +32,29 @@ export class Recipe {
     id: string;
     name: string;
     author: string;
+    description: string;
     ingredients: string[];
     directions: string[];
-    constructor(id, {name, author, ingredients, directions}) {
+    constructor(id, {name, author, description, ingredients, directions}: RecipeInput) {
         this.id = id;
         this.name = name;
         this.author = author;
+        this.description = description;
+        this.ingredients = ingredients;
+        this.directions = directions;
+    }
+}
+
+export class RecipeInput {
+    name: string;
+    author: string;
+    description: string;
+    ingredients: string[];
+    directions: string[];
+    constructor(name, author, description, ingredients, directions) {
+        this.name = name;
+        this.author = author;
+        this.description = description;
         this.ingredients = ingredients;
         this.directions = directions;
     }
