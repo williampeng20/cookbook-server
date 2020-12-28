@@ -24,7 +24,7 @@ type Query {
 type Mutation {
     createRecipe(input: RecipeInput): Recipe
     updateRecipe(id: ID!, input: RecipeInput): Recipe
-    deleteRecipe(id: ID!): Boolean
+    deleteRecipe(id: ID!, author: String!): Boolean
 }
 `;
 

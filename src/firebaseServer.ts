@@ -16,7 +16,7 @@ export const rootResolver = {
     getRecipe: ({id}) => {
         const ref = db.ref(`recipes/${id}`);
         return ref.once("value").then((snapshot) => {
-            let rcp = snapshot.val();
+            const rcp = snapshot.val();
             if (!rcp) {
                 throw new Error(`No recipe exists with id: ${id}`);
             }
@@ -34,14 +34,41 @@ export const rootResolver = {
         });
     },
     getRecipes: ({author}) => {
+        if (author) {
+            const authorRef = db.ref(`authors/${author}/recipes`);
+            return authorRef.once("value").then((snapshot) => {
+                const rcpIds: {[key:string]: boolean} = snapshot.val();
+                const rcpPromises = [];
+                for (const [id, _] of Object.entries(rcpIds)) {
+                    const recipeRef = db.ref(`recipes/${id}`);
+                    rcpPromises.push( recipeRef.once("value").then((snap) => {
+                        const rcp = snap.val();
+                        const rcpInput = {
+                            name: rcp.name,
+                            author: rcp.author,
+                            description: rcp.description,
+                            ingredients: rcp.ingredients,
+                            directions: rcp.directions,
+                        };
+                        return new Recipe(id, rcpInput);
+                    }).catch((error) => {
+                        console.log(error);
+                    }) );
+                }
+                return Promise.all(rcpPromises).then((values) => {
+                    return values;
+                });
+            }).catch((error) => {
+                console.log(error);
+                throw new Error(`Getting recipes for author: ${author} failed.`);
+            });
+        }
         const ref = db.ref('recipes');
         return ref.once("value").then((snapshot) => {
-            let rcps: {[key:string]: RecipeInput} = snapshot.val();
+            const rcps: {[key:string]: RecipeInput} = snapshot.val();
             const recipes = [];
             for (const [id, recipe] of Object.entries(rcps)) {
-                if (!author || (author == recipe.author)) {
-                    recipes.push(new Recipe(id, recipe));
-                }
+                recipes.push(new Recipe(id, recipe));
             }
             return recipes;
         }).catch((error) => {
@@ -52,15 +79,21 @@ export const rootResolver = {
     createRecipe: ({input}) => {
         var id = require('crypto').randomBytes(10).toString('hex');
         if (input.name && input.author && input.ingredients && input.directions) {
-            const ref = db.ref(`recipes/${id}`);
-            return ref.set({
+            const recipeRef = db.ref(`recipes/${id}`);
+            return recipeRef.set({
                 name: input.name,
                 author: input.author,
                 description: input.description,
                 ingredients: input.ingredients,
                 directions: input.directions,
             }).then((val) => {
-                return new Recipe(id, input);
+                const authorRef = db.ref(`authors/${input.author}/recipes/${id}`);
+                return authorRef.set(true).then((val) => {
+                    return new Recipe(id, input);
+                }).catch((error) => {
+                    console.log(error);
+                    throw new Error('Setting recipe under author operation failed.');
+                });
             }).catch((error) => {
                 console.log(error);
                 throw new Error('Create recipe operation failed.');
@@ -88,10 +121,13 @@ export const rootResolver = {
             throw new Error('Missing fields in Recipe input');
         }
     },
-    deleteRecipe: ({id}) => {
+    deleteRecipe: ({id, author}) => {
         const ref = db.ref(`recipes/${id}`);
         return ref.remove().then((val) => {
-            return true;
+            const authorRef = db.ref(`authors/${author}/recipes/${id}`);
+            return authorRef.remove().then((val) => {
+                return true;
+            });
         }).catch((error) => {
             console.log(error);
             throw new Error('Delete recipe operation failed.');
