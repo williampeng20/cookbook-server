@@ -20,14 +20,9 @@ exports.rootResolver = {
             if (!rcp) {
                 throw new Error("No recipe exists with id: " + id);
             }
-            var rcpInput = {
-                name: rcp.name,
-                author: rcp.author,
-                description: rcp.description,
-                ingredients: rcp.ingredients,
-                directions: rcp.directions,
-            };
-            return new schema_1.Recipe(id, rcpInput);
+            rcp.id = id;
+            rcp.ingredients = getIngredientsList(rcp.ingredients);
+            return rcp;
         }).catch(function (error) {
             console.log(error);
             throw new Error("Getting recipe " + id + " failed.");
@@ -44,14 +39,12 @@ exports.rootResolver = {
                     var recipeRef = db.ref("recipes/" + id);
                     rcpPromises.push(recipeRef.once("value").then(function (snap) {
                         var rcp = snap.val();
-                        var rcpInput = {
-                            name: rcp.name,
-                            author: rcp.author,
-                            description: rcp.description,
-                            ingredients: rcp.ingredients,
-                            directions: rcp.directions,
-                        };
-                        return new schema_1.Recipe(id, rcpInput);
+                        if (!rcp) {
+                            throw new Error("No recipe exists with id: " + id);
+                        }
+                        rcp.id = id;
+                        rcp.ingredients = getIngredientsList(rcp.ingredients);
+                        return rcp;
                     }).catch(function (error) {
                         console.log(error);
                     }));
@@ -74,7 +67,10 @@ exports.rootResolver = {
             var recipes = [];
             for (var _i = 0, _a = Object.entries(rcps); _i < _a.length; _i++) {
                 var _b = _a[_i], id = _b[0], recipe = _b[1];
-                recipes.push(new schema_1.Recipe(id, recipe));
+                recipe.id = id;
+                var igList = recipe.ingredients;
+                recipe.ingredients = getIngredientsList(igList);
+                recipes.push(recipe);
             }
             return recipes;
         }).catch(function (error) {
@@ -83,52 +79,62 @@ exports.rootResolver = {
         });
     },
     createRecipe: function (_a) {
-        var input = _a.input;
+        var recipe = _a.recipe, ingredients = _a.ingredients;
         var id = require('crypto').randomBytes(10).toString('hex');
-        if (input.name && input.author && input.ingredients && input.directions) {
+        var promises = [];
+        var ingredientContainer = {};
+        if (ingredients) {
+            ingredientContainer = getIngredientsContainer(ingredients);
+        }
+        if (ingredients && recipe && recipe.name && recipe.author && recipe.description
+            && recipe.directions && recipe.servingSize) {
             var recipeRef = db.ref("recipes/" + id);
-            return recipeRef.set({
-                name: input.name,
-                author: input.author,
-                description: input.description,
-                ingredients: input.ingredients,
-                directions: input.directions,
-            }).then(function (val) {
-                var authorRef = db.ref("authors/" + input.author + "/recipes/" + id);
-                return authorRef.set(true).then(function (val) {
-                    return new schema_1.Recipe(id, input);
-                }).catch(function (error) {
-                    console.log(error);
-                    throw new Error('Setting recipe under author operation failed.');
-                });
+            promises.push(recipeRef.set({
+                name: recipe.name,
+                author: recipe.author,
+                description: recipe.description,
+                directions: recipe.directions,
+                servingSize: recipe.servingSize,
+                ingredients: ingredientContainer
             }).catch(function (error) {
                 console.log(error);
                 throw new Error('Create recipe operation failed.');
-            });
+            }));
+            var authorRef = db.ref("authors/" + recipe.author + "/recipes/" + id);
+            promises.push(authorRef.set(true).catch(function (error) {
+                console.log(error);
+                throw new Error('Setting recipe under author operation failed.');
+            }));
         }
         else {
-            throw new Error('Missing fields in Recipe input');
+            throw new Error('Missing fields in Recipe Input or Ingredients Input');
         }
+        return Promise.all(promises).then(function (val) {
+            return new schema_1.Recipe(id, recipe, getIngredientsList(ingredientContainer));
+        });
     },
     updateRecipe: function (_a) {
-        var id = _a.id, input = _a.input;
-        if (input.name && input.author && input.ingredients && input.directions) {
-            var ref = db.ref("recipes/" + id);
-            return ref.set({
-                name: input.name,
-                author: input.author,
-                description: input.description,
-                ingredients: input.ingredients,
-                directions: input.directions,
+        var id = _a.id, recipe = _a.recipe, ingredients = _a.ingredients;
+        if (ingredients && recipe && recipe.name && recipe.author && recipe.description && recipe.directions
+            && recipe.servingSize) {
+            var recipeRef = db.ref("recipes/" + id);
+            var ingredientContainer_1 = getIngredientsContainer(ingredients);
+            return recipeRef.set({
+                name: recipe.name,
+                author: recipe.author,
+                description: recipe.description,
+                directions: recipe.directions,
+                servingSize: recipe.servingSize,
+                ingredients: ingredientContainer_1
             }).then(function (val) {
-                return new schema_1.Recipe(id, input);
+                return new schema_1.Recipe(id, recipe, getIngredientsList(ingredientContainer_1));
             }).catch(function (error) {
                 console.log(error);
                 throw new Error('Update recipe operation failed.');
             });
         }
         else {
-            throw new Error('Missing fields in Recipe input');
+            throw new Error('Missing fields in Recipe Input');
         }
     },
     deleteRecipe: function (_a) {
@@ -145,3 +151,21 @@ exports.rootResolver = {
         });
     }
 };
+function getIngredientsList(ingredients) {
+    var list = [];
+    for (var _i = 0, _a = Object.entries(ingredients); _i < _a.length; _i++) {
+        var _b = _a[_i], _ = _b[0], ingredient = _b[1];
+        list.push(ingredient);
+    }
+    return list;
+}
+function getIngredientsContainer(ingredients) {
+    var container = {};
+    ingredients.map(function (ig) {
+        var igId = require('crypto').randomBytes(4).toString('hex');
+        return new schema_1.Ingredient(igId, ig.name, ig.amount, ig.unit);
+    }).forEach(function (ig) {
+        container[ig.id] = ig;
+    });
+    return container;
+}

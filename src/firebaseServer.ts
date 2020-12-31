@@ -1,5 +1,5 @@
 import admin = require("firebase-admin");
-import { Recipe, RecipeInput } from './schema';
+import { Recipe, RecipeInput, Ingredient, IngredientInput, IngredientsContainer } from './schema';
 
 // Place firebase-creds.json at the root of the package
 const credsPath = `${process.cwd()}\\firebase-creds.json`;
@@ -13,27 +13,22 @@ admin.initializeApp({
 const db = admin.database();
 
 export const rootResolver = {
-    getRecipe: ({id}) => {
+    getRecipe: ({id}: {id: string}) => {
         const ref = db.ref(`recipes/${id}`);
         return ref.once("value").then((snapshot) => {
             const rcp = snapshot.val();
             if (!rcp) {
                 throw new Error(`No recipe exists with id: ${id}`);
             }
-            const rcpInput = {
-                name: rcp.name,
-                author: rcp.author,
-                description: rcp.description,
-                ingredients: rcp.ingredients,
-                directions: rcp.directions,
-            };
-            return new Recipe(id, rcpInput);
+            rcp.id = id;
+            rcp.ingredients = getIngredientsList(rcp.ingredients);
+            return rcp as Recipe;
         }).catch((error) => {
             console.log(error);
             throw new Error(`Getting recipe ${id} failed.`);
         });
     },
-    getRecipes: ({author}) => {
+    getRecipes: ({author}: {author: string}) => {
         if (author) {
             const authorRef = db.ref(`authors/${author}/recipes`);
             return authorRef.once("value").then((snapshot) => {
@@ -43,14 +38,12 @@ export const rootResolver = {
                     const recipeRef = db.ref(`recipes/${id}`);
                     rcpPromises.push( recipeRef.once("value").then((snap) => {
                         const rcp = snap.val();
-                        const rcpInput = {
-                            name: rcp.name,
-                            author: rcp.author,
-                            description: rcp.description,
-                            ingredients: rcp.ingredients,
-                            directions: rcp.directions,
-                        };
-                        return new Recipe(id, rcpInput);
+                        if (!rcp) {
+                            throw new Error(`No recipe exists with id: ${id}`);
+                        }
+                        rcp.id = id;
+                        rcp.ingredients = getIngredientsList(rcp.ingredients);
+                        return rcp as Recipe;
                     }).catch((error) => {
                         console.log(error);
                     }) );
@@ -65,10 +58,13 @@ export const rootResolver = {
         }
         const ref = db.ref('recipes');
         return ref.once("value").then((snapshot) => {
-            const rcps: {[key:string]: RecipeInput} = snapshot.val();
+            const rcps: {[key:string]: Recipe} = snapshot.val();
             const recipes = [];
             for (const [id, recipe] of Object.entries(rcps)) {
-                recipes.push(new Recipe(id, recipe));
+                recipe.id = id;
+                const igList: unknown = recipe.ingredients;
+                recipe.ingredients = getIngredientsList(igList as IngredientsContainer);
+                recipes.push(recipe);
             }
             return recipes;
         }).catch((error) => {
@@ -76,52 +72,62 @@ export const rootResolver = {
             throw new Error('Get recipes operation failed.');
         });
     },
-    createRecipe: ({input}) => {
-        var id = require('crypto').randomBytes(10).toString('hex');
-        if (input.name && input.author && input.ingredients && input.directions) {
+    createRecipe: ({recipe, ingredients}: {recipe: RecipeInput, ingredients: IngredientInput[]}) => {
+        const id = require('crypto').randomBytes(10).toString('hex');
+        const promises = [];
+        let ingredientContainer: IngredientsContainer = {};
+        if (ingredients) {
+            ingredientContainer = getIngredientsContainer(ingredients);
+        }
+        if (ingredients && recipe && recipe.name && recipe.author && recipe.description
+            && recipe.directions && recipe.servingSize) {
             const recipeRef = db.ref(`recipes/${id}`);
-            return recipeRef.set({
-                name: input.name,
-                author: input.author,
-                description: input.description,
-                ingredients: input.ingredients,
-                directions: input.directions,
-            }).then((val) => {
-                const authorRef = db.ref(`authors/${input.author}/recipes/${id}`);
-                return authorRef.set(true).then((val) => {
-                    return new Recipe(id, input);
-                }).catch((error) => {
-                    console.log(error);
-                    throw new Error('Setting recipe under author operation failed.');
-                });
+            promises.push( recipeRef.set({
+                name: recipe.name,
+                author: recipe.author,
+                description: recipe.description,
+                directions: recipe.directions,
+                servingSize: recipe.servingSize,
+                ingredients: ingredientContainer
             }).catch((error) => {
                 console.log(error);
                 throw new Error('Create recipe operation failed.');
-            });
+            }) );
+            const authorRef = db.ref(`authors/${recipe.author}/recipes/${id}`);
+            promises.push( authorRef.set(true).catch((error) => {
+                console.log(error);
+                throw new Error('Setting recipe under author operation failed.');
+            }) );
         } else {
-            throw new Error('Missing fields in Recipe input');
+            throw new Error('Missing fields in Recipe Input or Ingredients Input');
         }
+        return Promise.all(promises).then((val) => {
+            return new Recipe(id, recipe, getIngredientsList(ingredientContainer));
+        });
     },
-    updateRecipe: ({id, input}) => {
-        if (input.name && input.author && input.ingredients && input.directions) {
-            const ref = db.ref(`recipes/${id}`);
-            return ref.set({
-                name: input.name,
-                author: input.author,
-                description: input.description,
-                ingredients: input.ingredients,
-                directions: input.directions,
+    updateRecipe: ({id, recipe, ingredients}: {id: string, recipe: RecipeInput, ingredients: IngredientInput[]}) => {
+        if (ingredients && recipe && recipe.name && recipe.author && recipe.description && recipe.directions
+            && recipe.servingSize) {
+            const recipeRef = db.ref(`recipes/${id}`);
+            const ingredientContainer = getIngredientsContainer(ingredients);
+            return recipeRef.set({
+                name: recipe.name,
+                author: recipe.author,
+                description: recipe.description,
+                directions: recipe.directions,
+                servingSize: recipe.servingSize,
+                ingredients: ingredientContainer
             }).then((val) => {
-                return new Recipe(id, input);
+                return new Recipe(id, recipe, getIngredientsList(ingredientContainer));
             }).catch((error) => {
                 console.log(error);
                 throw new Error('Update recipe operation failed.');
             });
         } else {
-            throw new Error('Missing fields in Recipe input');
+            throw new Error('Missing fields in Recipe Input');
         }
     },
-    deleteRecipe: ({id, author}) => {
+    deleteRecipe: ({id, author}: {id: string, author: string}) => {
         const ref = db.ref(`recipes/${id}`);
         return ref.remove().then((val) => {
             const authorRef = db.ref(`authors/${author}/recipes/${id}`);
@@ -134,3 +140,22 @@ export const rootResolver = {
         });
     }
 };
+
+function getIngredientsList(ingredients: IngredientsContainer): Ingredient[] {
+    const list: Ingredient[] = [];
+    for (const [_, ingredient] of Object.entries(ingredients)) {
+        list.push(ingredient);
+    }
+    return list;
+}
+
+function getIngredientsContainer(ingredients: IngredientInput[]): IngredientsContainer {
+    const container: IngredientsContainer = {};
+    ingredients.map((ig) => {
+        const igId = require('crypto').randomBytes(4).toString('hex');
+        return new Ingredient(igId, ig.name, ig.amount, ig.unit);
+    }).forEach((ig) => {
+        container[ig.id] = ig;
+    })
+    return container;
+}
