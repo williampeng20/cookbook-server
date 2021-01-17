@@ -1,11 +1,10 @@
 import express = require('express');
-import expressGraphQl = require('express-graphql');
-import graphQl = require('graphql');
 import cors = require('cors');
+import { graphqlHTTP } from 'express-graphql';
+import { buildSchema } from 'graphql';
 import { schemaDefinition } from './schema';
 import { rootResolver } from './firebaseServer';
-const { graphqlHTTP } = expressGraphQl;
-const { buildSchema } = graphQl;
+// import passport from './passport';
 
 var schema = buildSchema(schemaDefinition);
 var app = express();

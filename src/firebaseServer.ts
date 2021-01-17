@@ -2,7 +2,7 @@ import admin = require("firebase-admin");
 import { Recipe, RecipeInput, Ingredient, IngredientInput, IngredientsContainer } from './schema';
 
 // Place firebase-creds.json at the root of the package
-const credsPath = `${process.cwd()}\\firebase-creds.json`;
+const credsPath = `${process.cwd()}/firebase-creds.json`;
 var serviceAccount = require(credsPath);
 
 admin.initializeApp({
@@ -28,9 +28,9 @@ export const rootResolver = {
             throw new Error(`Getting recipe ${id} failed.`);
         });
     },
-    getRecipes: ({author}: {author: string}) => {
-        if (author) {
-            const authorRef = db.ref(`authors/${author}/recipes`);
+    getRecipes: ({authorId}: {authorId: string}) => {
+        if (authorId) {
+            const authorRef = db.ref(`authors/${authorId}/recipes`);
             return authorRef.once("value").then((snapshot) => {
                 const rcpIds: {[key:string]: boolean} = snapshot.val();
                 const rcpPromises = [];
@@ -53,7 +53,7 @@ export const rootResolver = {
                 });
             }).catch((error) => {
                 console.log(error);
-                throw new Error(`Getting recipes for author: ${author} failed.`);
+                throw new Error(`Getting recipes for author: ${authorId} failed.`);
             });
         }
         const ref = db.ref('recipes');
@@ -79,12 +79,13 @@ export const rootResolver = {
         if (ingredients) {
             ingredientContainer = getIngredientsContainer(ingredients);
         }
-        if (ingredients && recipe && recipe.name && recipe.author && recipe.description
+        if (ingredients && recipe && recipe.name && recipe.authorId && recipe.authorName && recipe.description
             && recipe.directions && recipe.servingSize) {
             const recipeRef = db.ref(`recipes/${id}`);
             promises.push( recipeRef.set({
                 name: recipe.name,
-                author: recipe.author,
+                authorName: recipe.authorName,
+                authorId: recipe.authorId,
                 description: recipe.description,
                 directions: recipe.directions,
                 servingSize: recipe.servingSize,
@@ -93,7 +94,7 @@ export const rootResolver = {
                 console.log(error);
                 throw new Error('Create recipe operation failed.');
             }) );
-            const authorRef = db.ref(`authors/${recipe.author}/recipes/${id}`);
+            const authorRef = db.ref(`authors/${recipe.authorId}/recipes/${id}`);
             promises.push( authorRef.set(true).catch((error) => {
                 console.log(error);
                 throw new Error('Setting recipe under author operation failed.');
@@ -106,13 +107,14 @@ export const rootResolver = {
         });
     },
     updateRecipe: ({id, recipe, ingredients}: {id: string, recipe: RecipeInput, ingredients: IngredientInput[]}) => {
-        if (ingredients && recipe && recipe.name && recipe.author && recipe.description && recipe.directions
+        if (ingredients && recipe && recipe.name && recipe.authorId && recipe.authorName && recipe.description && recipe.directions
             && recipe.servingSize) {
             const recipeRef = db.ref(`recipes/${id}`);
             const ingredientContainer = getIngredientsContainer(ingredients);
             return recipeRef.set({
                 name: recipe.name,
-                author: recipe.author,
+                authorName: recipe.authorName,
+                authorId: recipe.authorId,
                 description: recipe.description,
                 directions: recipe.directions,
                 servingSize: recipe.servingSize,
@@ -127,10 +129,10 @@ export const rootResolver = {
             throw new Error('Missing fields in Recipe Input');
         }
     },
-    deleteRecipe: ({id, author}: {id: string, author: string}) => {
+    deleteRecipe: ({id, authorId}: {id: string, authorId: string}) => {
         const ref = db.ref(`recipes/${id}`);
         return ref.remove().then((val) => {
-            const authorRef = db.ref(`authors/${author}/recipes/${id}`);
+            const authorRef = db.ref(`authors/${authorId}/recipes/${id}`);
             return authorRef.remove().then((val) => {
                 return true;
             });

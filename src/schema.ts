@@ -1,7 +1,8 @@
 export const schemaDefinition = `
 input RecipeInput {
     name: String!
-    author: String!
+    authorName: String!
+    authorId: String!
     description: String!
     directions: [String!]!
     servingSize: Int!
@@ -23,7 +24,8 @@ type Ingredient {
 type Recipe {
     id: ID!
     name: String!
-    author: String!
+    authorName: String!
+    authorId: String!
     description: String!
     directions: [String!]!
     ingredients: [Ingredient!]!
@@ -32,20 +34,21 @@ type Recipe {
 
 type Query {
     getRecipe(id: ID!): Recipe
-    getRecipes(author: String): [Recipe!]!
+    getRecipes(authorId: String): [Recipe!]!
 }
 
 type Mutation {
     createRecipe(recipe: RecipeInput!, ingredients: [IngredientInput!]!): Recipe
     updateRecipe(id: ID!, recipe: RecipeInput!, ingredients: [IngredientInput!]!): Recipe
-    deleteRecipe(id: ID!, author: String!): Boolean
+    deleteRecipe(id: ID!, authorId: String!): Boolean
 }
 `;
 
 export class Recipe {
     id: string;
     name: string;
-    author: string;
+    authorName: string;
+    authorId: string;
     description: string;
     directions: string[];
     ingredients: Ingredient[];
@@ -53,7 +56,8 @@ export class Recipe {
     constructor(id, recipe: RecipeInput, ingredients: Ingredient[]) {
         this.id = id;
         this.name = recipe.name;
-        this.author = recipe.author;
+        this.authorName = recipe.authorName;
+        this.authorId = recipe.authorId;
         this.description = recipe.description;
         this.directions = recipe.directions;
         this.ingredients = ingredients;
@@ -63,13 +67,15 @@ export class Recipe {
 
 export class RecipeInput {
     name: string;
-    author: string;
+    authorName: string;
+    authorId: string;
     description: string;
     directions: string[];
     servingSize: number;
-    constructor(name, author, description, directions, servingSize) {
+    constructor(name, authorName, authorId, description, directions, servingSize) {
         this.name = name;
-        this.author = author;
+        this.authorName = authorName;
+        this.authorId = authorId;
         this.description = description;
         this.directions = directions;
         this.servingSize = servingSize;
